@@ -79,7 +79,7 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 .vote-pill.markov2{border-color:var(--accent);color:var(--accent)}
 .vote-pill.final{border-color:#8b5cf6;color:#8b5cf6;background:rgba(139,92,246,.1)}
 .latency{font-family:monospace;color:var(--success)}
-.ws-log{font-family:'Courier New',monospace;font-size:10px;color:var(--muted);max-height:120px;overflow-y:auto;background:var(--bg);border-radius:4px;padding:6px;margin-top:8px;border:1px solid var(--border)}
+.ws-log{font-family:'Courier New',monospace;font-size:10px;color:var(--muted);max-height:150px;overflow-y:auto;background:var(--bg);border-radius:4px;padding:6px;margin-top:8px;border:1px solid var(--border)}
 .ws-log .log-line{margin:1px 0}.ws-log .log-time{color:#6b7280;margin-right:6px}
 .ws-log .log-in{color:var(--success)}.ws-log .log-out{color:var(--accent)}.ws-log .log-err{color:var(--danger)}.ws-log .log-warn{color:var(--warning)}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--panel)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
@@ -241,27 +241,36 @@ setStatus('conn','● CONNECTING...');
 log('Opening: '+url,'out');
 try{state.ws=new WebSocket(url)}catch(e){log('Failed: '+e.message,'err');setStatus('err','● FAILED');return}
 state.ws.onopen=()=>{setStatus('live','● LIVE — '+state.activeSymbol);log('WebSocket OPEN','in');document.getElementById('connectBtn').disabled=true;document.getElementById('disconnectBtn').disabled=false;document.getElementById('symbolSelect').disabled=true;document.getElementById('streamSym').textContent=state.activeSymbol;const sub={ticks:state.activeSymbol,subscribe:1,req_id:state.reqId++};state.ws.send(JSON.stringify(sub));log('Sent: '+JSON.stringify(sub),'out');state.pingInterval=setInterval(()=>{if(state.ws&&state.ws.readyState===WebSocket.OPEN)state.ws.send(JSON.stringify({ping:1,req_id:state.reqId++}))},25000)}
-state.ws.onmessage=(e)=>{let data;try{data=JSON.parse(e.data)}catch(err){log('Invalid JSON: '+e.data.slice(0,80),'err');return}const short=JSON.stringify(data).slice(0,150);log('Recv ['+data.msg_type+']: '+short+'...','in');if(data.msg_type==='ping')return;if(data.msg_type==='tick'&&data.tick){const q=parseFloat(data.tick.quote);if(isNaN(q)){log('Bad quote: '+data.tick.quote,'err');return}const d=parseInt(q.toString().slice(-1));state.prices[state.activeSymbol]=q;document.getElementById('lastPrice').textContent='Price: '+q.toFixed(5);const t0=performance.now();processTick(state.activeSymbol,d);document.getElementById('latency').textContent=(performance.now()-t0).toFixed(2)+'ms'}if(data.error){log('API Error: '+(data.error.message||JSON.stringify(data.error)),'err');setStatus('err','● API ERROR')}}
+state.ws.onmessage=(e)=>{let data;try{data=JSON.parse(e.data)}catch(err){log('Invalid JSON: '+e.data.slice(0,80),'err');return}log('Recv ['+data.msg_type+']','in');if(data.msg_type==='ping')return;if(data.msg_type==='tick'&&data.tick){const q=parseFloat(data.tick.quote);if(isNaN(q)){log('Bad quote: '+data.tick.quote,'err');return}const d=parseInt(q.toString().slice(-1));state.prices[state.activeSymbol]=q;document.getElementById('lastPrice').textContent='Price: '+q.toFixed(5);log('Tick: sym='+state.activeSymbol+' digit='+d+' quote='+q,'in');try{processTick(state.activeSymbol,d)}catch(err){log('processTick ERROR: '+err.message,'err');console.error(err)}}if(data.error){log('API Error: '+(data.error.message||JSON.stringify(data.error)),'err');setStatus('err','● API ERROR')}}
 state.ws.onerror=(e)=>{log('WebSocket ERROR (state='+(state.ws?state.ws.readyState:'null')+')','err');setStatus('err','● ERROR')}
 state.ws.onclose=(e)=>{const reason=e.wasClean?'Clean('+e.code+')':'Abnormal('+e.code+')';log('WebSocket CLOSED — '+reason,e.wasClean?'out':'err');setStatus('','● DISCONNECTED');document.getElementById('connectBtn').disabled=false;document.getElementById('disconnectBtn').disabled=true;document.getElementById('symbolSelect').disabled=false;document.getElementById('streamSym').textContent='—';clearInterval(state.pingInterval);state.ws=null}
 state.connected=true}
 
 function disconnectWS(){state.connected=false;clearInterval(state.pingInterval);if(state.ws){if(state.ws.readyState===WebSocket.OPEN){const f={forget_all:'ticks',req_id:state.reqId++};state.ws.send(JSON.stringify(f));log('Sent: '+JSON.stringify(f),'out')}state.ws.close();state.ws=null}setStatus('','● DISCONNECTED');document.getElementById('connectBtn').disabled=false;document.getElementById('disconnectBtn').disabled=true;document.getElementById('symbolSelect').disabled=false;document.getElementById('streamSym').textContent='—';document.getElementById('lastPrice').textContent='Price: —';log('Disconnected','out')}
 
-function processTick(sym,digit){state.ticks[sym].push(digit);if(state.ticks[sym].length>500)state.ticks[sym].shift();state.engines[sym].add(digit,state.ticks[sym]);renderAll(sym)}
+function processTick(sym,digit){
+log('processTick start: sym='+sym+' digit='+digit,'out');
+state.ticks[sym].push(digit);
+if(state.ticks[sym].length>500)state.ticks[sym].shift();
+log('Ticks count for '+sym+': '+state.ticks[sym].length,'out');
+state.engines[sym].add(digit,state.ticks[sym]);
+try{renderAll(sym)}catch(err){log('renderAll ERROR: '+err.message,'err');console.error(err)}
+}
 
 const tooltip=document.getElementById('tooltip');
 function showTooltip(e,text){tooltip.textContent=text;tooltip.style.left=e.pageX+12+'px';tooltip.style.top=e.pageY+12+'px';tooltip.style.opacity=1}
 function hideTooltip(){tooltip.style.opacity=0}
 
 function renderAll(sym){
-const eng=state.engines[sym],ticks=state.ticks[sym];if(!eng||ticks.length===0)return;
+const eng=state.engines[sym],ticks=state.ticks[sym];
+if(!eng||!ticks||ticks.length===0){log('renderAll: empty data for '+sym,'warn');return}
+log('renderAll: '+sym+' ticks='+ticks.length,'out');
 document.getElementById('tickCount').textContent='Ticks: '+ticks.length;
 const recent=ticks.slice(-50),hc=eng.hc(ticks,30);
 document.getElementById('tickStream').innerHTML=recent.map((d,i)=>{let c='tick-digit';if(i>=recent.length-5)c+=' recent';else if(hc.hot.includes(d))c+=' hot';else if(hc.cold.includes(d))c+=' cold';return`<div class="${c}">${d}</div>`}).join('');
 const probs=eng.ens(ticks),maxP=Math.max(...probs);
 document.getElementById('predictionBar').innerHTML=probs.map((p,d)=>`<div class="pred-col"><div class="pred-val">${(p*100).toFixed(1)}%</div><div class="pred-bar ${p===maxP?'ensemble':''}" style="height:${Math.max(4,p*300)}px"></div><div class="pred-label">${d}</div></div>`).join('');
-const last=ticks[ticks.length-1],p2=ticks[ticks.length-2],freq=eng.counts.map(c=>c/Math.max(1,eng.total)),rev=freq.map((p,i)=>({d:i,v:0.1+(0.1-p)*0.5})).sort((a,b)=>b.v-a.v)[0].d,m1b=eng.getM1(last).map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d,m2b=eng.getM2(p2,last).map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d,ensb=probs.map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d;
+const last=ticks[ticks.length-1],p2=ticks.length>1?ticks[ticks.length-2]:0,freq=eng.counts.map(c=>c/Math.max(1,eng.total)),rev=freq.map((p,i)=>({d:i,v:0.1+(0.1-p)*0.5})).sort((a,b)=>b.v-a.v)[0].d,m1b=eng.getM1(last).map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d,m2b=eng.getM2(p2,last).map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d,ensb=probs.map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d;
 document.getElementById('ensembleVotes').innerHTML=`<span class="vote-pill freq">Freq Reversion: ${rev}</span><span class="vote-pill markov1">Markov-1: ${m1b}</span><span class="vote-pill markov2">Markov-2: ${m2b}</span><span class="vote-pill final">ENSEMBLE: ${ensb}</span>`;
 const mv=Math.max(...eng.markov1.flat())||1;
 document.getElementById('markov1Heatmap').innerHTML=eng.markov1.flatMap((row,i)=>row.map((cnt,j)=>{const int=cnt/mv,pr=eng.total>0?(cnt/Math.max(1,eng.counts[i])*100).toFixed(0):0,bg=`rgba(59,130,246,${0.1+int*0.9})`;return`<div class="heat-cell" style="background:${bg};color:${int>0.5?'white':'var(--text)'}" onmouseenter="showTooltip(event,'P(${j}|${i})=${pr}%, C:${cnt}')" onmouseleave="hideTooltip()">${cnt}</div>`})).join('');
@@ -283,4 +292,4 @@ window.addEventListener('resize',()=>{if(state.engines[state.activeSymbol])rende
 renderAll(state.activeSymbol);
 </script>
 </body>
-</html>
+  </html>
