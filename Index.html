@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deriv Volatility Digit Analyzer — Live</title>
+<style>
+:root{--bg:#0a0e17;--panel:#111827;--border:#1f2937;--text:#e5e7eb;--muted:#9ca3af;--accent:#3b82f6;--success:#10b981;--danger:#ef4444;--warning:#f59e0b;--hot:#f87171;--cold:#60a5fa;--grid:#1f2937}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;overflow-x:hidden}
+.header{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:10px}
+.header h1{font-size:16px;font-weight:700;letter-spacing:.5px}
+.header .status{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.badge{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;background:var(--border);color:var(--muted);border:1px solid var(--grid)}
+.badge.live{background:rgba(16,185,129,.15);color:var(--success);border-color:var(--success);animation:pulse 2s infinite}
+.badge.conn{background:rgba(59,130,246,.15);color:var(--accent);border-color:var(--accent)}
+.badge.err{background:rgba(239,68,68,.15);color:var(--danger);border-color:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button,select,input{background:var(--accent);color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;transition:all .2s;font-family:inherit}
+button:hover{background:#2563eb;transform:translateY(-1px)}
+button.secondary{background:var(--border);color:var(--text)}
+button.secondary:hover{background:#374151}
+button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+select,input{background:var(--bg);border:1px solid var(--border);color:var(--text)}
+select:focus,input:focus{outline:none;border-color:var(--accent)}
+.dashboard{display:grid;grid-template-columns:280px 1fr 320px;gap:12px;padding:12px}
+@media(max-width:1200px){.dashboard{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;overflow:hidden}
+.panel-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.tick-stream{font-family:'Courier New',monospace;font-size:18px;font-weight:700;display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto}
+.tick-digit{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--border);border:1px solid var(--grid);transition:all .3s}
+.tick-digit.recent{background:rgba(59,130,246,.2);border-color:var(--accent);color:var(--accent);transform:scale(1.1)}
+.tick-digit.hot{background:rgba(248,113,113,.2);border-color:var(--hot);color:var(--hot)}
+.tick-digit.cold{background:rgba(96,165,250,.2);border-color:var(--cold);color:var(--cold)}
+.prediction-bar{display:flex;gap:4px;margin-top:10px;height:120px;align-items:flex-end}
+.pred-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.pred-bar{width:100%;background:linear-gradient(to top,var(--accent),#60a5fa);border-radius:3px 3px 0 0;transition:height .4s cubic-bezier(.4,0,.2,1);min-height:2px}
+.pred-bar.ensemble{background:linear-gradient(to top,#8b5cf6,#a78bfa)}
+.pred-label{font-size:11px;font-weight:700;color:var(--muted)}
+.pred-val{font-size:10px;color:var(--text);font-weight:600}
+.heatmap-container{display:grid;grid-template-columns:repeat(10,1fr);gap:2px;margin-top:8px}
+.heat-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border-radius:3px;cursor:pointer;transition:transform .2s}
+.heat-cell:hover{transform:scale(1.2);z-index:10}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center}
+.stat-value{font-size:18px;font-weight:700}
+.stat-label{font-size:10px;color:var(--muted);margin-top:4px;text-transform:uppercase}
+.z-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-top:8px}
+.z-cell{text-align:center;padding:6px 2px;border-radius:4px;background:var(--bg);border:1px solid var(--border);font-size:11px}
+.z-cell .z-val{font-weight:700;font-size:13px}
+.z-cell .z-dig{color:var(--muted);font-size:10px;margin-bottom:2px}
+.z-pos{color:var(--success)}.z-neg{color:var(--danger)}.z-neu{color:var(--muted)}
+.acf-chart{height:100px;display:flex;align-items:flex-end;gap:8px;padding:0 8px}
+.acf-bar{flex:1;background:var(--accent);border-radius:3px 3px 0 0;transition:height .3s;position:relative}
+.acf-bar::after{content:attr(data-lag);position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--muted)}
+.split-bars{display:flex;gap:8px;margin-top:8px}
+.split-bar{flex:1;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;position:relative;overflow:hidden}
+.split-bar .fill{position:absolute;left:0;top:0;height:100%;transition:width .4s}
+.split-bar.even .fill{background:rgba(59,130,246,.3)}.split-bar.odd .fill{background:rgba(245,158,11,.3)}
+.split-bar.high .fill{background:rgba(16,185,129,.3)}.split-bar.low .fill{background:rgba(239,68,68,.3)}
+.ngram-list{max-height:140px;overflow-y:auto}
+.ngram-item{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px}
+.ngram-item:last-child{border-bottom:none}
+.ngram-pattern{font-family:monospace;font-weight:700;color:var(--accent)}
+.ngram-freq{color:var(--muted)}
+.chi-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px}
+.chi-table th,.chi-table td{padding:6px;text-align:left;border-bottom:1px solid var(--border)}
+.chi-table th{color:var(--muted);font-weight:600}
+.entropy-ring{width:80px;height:80px;margin:0 auto}
+.ring-bg{stroke:var(--border)}.ring-fg{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .5s}
+.entropy-center{text-anchor:middle;dominant-baseline:middle;fill:var(--text);font-size:14px;font-weight:700}
+.entropy-label{text-anchor:middle;dominant-baseline:middle;fill:var(--muted);font-size:8px}
+.tooltip{position:absolute;background:var(--bg);border:1px solid var(--accent);padding:6px 10px;border-radius:4px;font-size:11px;pointer-events:none;z-index:1000;opacity:0;transition:opacity .2s;white-space:nowrap}
+.ensemble-vote{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.vote-pill{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:var(--bg);border:1px solid var(--border)}
+.vote-pill.freq{border-color:var(--success);color:var(--success)}
+.vote-pill.markov1{border-color:var(--warning);color:var(--warning)}
+.vote-pill.markov2{border-color:var(--accent);color:var(--accent)}
+.vote-pill.final{border-color:#8b5cf6;color:#8b5cf6;background:rgba(139,92,246,.1)}
+.latency{font-family:monospace;color:var(--success)}
+.ws-log{font-family:'Courier New',monospace;font-size:10px;color:var(--muted);max-height:120px;overflow-y:auto;background:var(--bg);border-radius:4px;padding:6px;margin-top:8px;border:1px solid var(--border)}
+.ws-log .log-line{margin:1px 0}.ws-log .log-time{color:#6b7280;margin-right:6px}
+.ws-log .log-in{color:var(--success)}.ws-log .log-out{color:var(--accent)}.ws-log .log-err{color:var(--danger)}.ws-log .log-warn{color:var(--warning)}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--panel)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="tooltip" id="tooltip"></div>
+<div class="header">
+<div>
+<h1>🔮 DERIV VOLATILITY DIGIT ANALYZER</h1>
+<div style="font-size:11px;color:var(--muted);margin-top:2px">Live WebSocket • Connect One Index • Full Ensemble Stats</div>
+</div>
+<div class="status">
+<span class="badge" id="statusBadge">● DISCONNECTED</span>
+<span class="badge latency" id="latency">0.00ms</span>
+<span class="badge" id="tickCount">Ticks: 0</span>
+<span class="badge" id="lastPrice">Price: —</span>
+<div class="controls">
+<select id="symbolSelect">
+<option value="R_10">Volatility 10</option>
+<option value="R_25">Volatility 25</option>
+<option value="R_50">Volatility 50</option>
+<option value="R_75">Volatility 75</option>
+<option value="R_100" selected>Volatility 100</option>
+<option value="1HZ10V">Volatility 10 (1s)</option>
+<option value="1HZ25V">Volatility 25 (1s)</option>
+<option value="1HZ50V">Volatility 50 (1s)</option>
+<option value="1HZ75V">Volatility 75 (1s)</option>
+<option value="1HZ100V">Volatility 100 (1s)</option>
+</select>
+<input id="appIdInput" type="text" placeholder="App ID" value="1089" style="width:70px;text-align:center">
+<button onclick="connectWS()" id="connectBtn">Connect</button>
+<button class="secondary" onclick="disconnectWS()" id="disconnectBtn" disabled>Disconnect</button>
+<button class="secondary" onclick="resetCurrent()">Reset</button>
+<button class="secondary" onclick="exportData()">Export CSV</button>
+</div>
+</div>
+</div>
+
+<div class="dashboard">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div class="panel">
+<div class="panel-title"><span>Tick Stream</span><span id="streamSym" style="font-size:10px;color:var(--accent)">—</span></div>
+<div class="tick-stream" id="tickStream"></div>
+<div class="ws-log" id="wsLog"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Ensemble Prediction</div>
+<div class="prediction-bar" id="predictionBar"></div>
+<div class="ensemble-vote" id="ensembleVotes"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Markov 1st Order Heatmap</div>
+<div class="heatmap-container" id="markov1Heatmap"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Markov 2nd Order Top Transitions</div>
+<div class="ngram-list" id="markov2List"></div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div class="panel">
+<div class="panel-title">Statistical Overview</div>
+<div class="stats-grid">
+<div class="stat-box"><div class="stat-value" id="entropyVal">0.00</div><div class="stat-label">Shannon Entropy</div></div>
+<div class="stat-box"><div class="stat-value" id="biasVal">0.00</div><div class="stat-label">Bias Index</div></div>
+<div class="stat-box"><div class="stat-value" id="chiUniform">0.00</div><div class="stat-label">χ² Uniformity (p)</div></div>
+<div class="stat-box"><div class="stat-value" id="chiIndep">0.00</div><div class="stat-label">χ² Independence (p)</div></div>
+</div>
+<div style="display:flex;justify-content:center;margin-top:12px;gap:20px">
+<div><svg class="entropy-ring" viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="40" fill="none" stroke-width="8"/><circle class="ring-fg" id="entropyRing" cx="50" cy="50" r="40" fill="none" stroke-width="8" stroke-dasharray="251.2" stroke-dashoffset="251.2"/><text class="entropy-center" x="50" y="48" id="entropyPct">0%</text><text class="entropy-label" x="50" y="62">Entropy</text></svg></div>
+<div><svg class="entropy-ring" viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="40" fill="none" stroke-width="8"/><circle class="ring-fg" id="biasRing" cx="50" cy="50" r="40" fill="none" stroke-width="8" stroke-dasharray="251.2" stroke-dashoffset="251.2" stroke="#ef4444"/><text class="entropy-center" x="50" y="48" id="biasPct">0%</text><text class="entropy-label" x="50" y="62">Bias</text></svg></div>
+</div>
+</div>
+<div class="panel">
+<div class="panel-title">Z-Scores by Digit</div>
+<div class="z-grid" id="zScoreGrid"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Autocorrelation Function</div>
+<div class="acf-chart" id="acfChart"></div>
+<div style="display:flex;justify-content:space-between;margin-top:20px;padding:0 8px;font-size:10px;color:var(--muted)"><span>Lag 1</span><span>Lag 2</span><span>Lag 3</span><span>Lag 4</span><span>Lag 5</span></div>
+</div>
+<div class="panel">
+<div class="panel-title">Digit Distribution</div>
+<canvas id="distChart" height="120" style="width:100%"></canvas>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div class="panel">
+<div class="panel-title">Hot / Cold Analysis</div>
+<div id="hotCold"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Even / Odd / High / Low Split</div>
+<div class="split-bars">
+<div class="split-bar even"><div class="fill" id="evenFill"></div><span id="evenText">Even 50%</span></div>
+<div class="split-bar odd"><div class="fill" id="oddFill"></div><span id="oddText">Odd 50%</span></div>
+</div>
+<div class="split-bars" style="margin-top:8px">
+<div class="split-bar high"><div class="fill" id="highFill"></div><span id="highText">High 50%</span></div>
+<div class="split-bar low"><div class="fill" id="lowFill"></div><span id="lowText">Low 50%</span></div>
+</div>
+</div>
+<div class="panel">
+<div class="panel-title">Top Bigram Patterns</div>
+<div class="ngram-list" id="bigramList"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Top Trigram Patterns</div>
+<div class="ngram-list" id="trigramList"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Chi-Square Test Details</div>
+<table class="chi-table"><tr><th>Test</th><th>Statistic</th><th>p-value</th><th>Result</th></tr>
+<tr><td>Uniformity</td><td id="chiUStat">0.00</td><td id="chiUP">0.00</td><td id="chiUR">—</td></tr>
+<tr><td>Independence</td><td id="chiIStat">0.00</td><td id="chiIP">0.00</td><td id="chiIR">—</td></tr>
+</table>
+</div>
+</div>
+</div>
+
+<script>
+const state={ws:null,pingInterval:null,connected:false,activeSymbol:'R_100',appId:'1089',reqId:1,engines:{},ticks:{},prices:{}};
+const ALL=['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'];
+ALL.forEach(s=>{state.engines[s]=new StatsEngine();state.ticks[s]=[];state.prices[s]=null});
+
+class StatsEngine{
+constructor(){this.markov1=Array(10).fill(null).map(()=>Array(10).fill(0));this.markov2={};this.counts=Array(10).fill(0);this.total=0}
+add(d,all){this.counts[d]++;this.total++;const i=all.length;if(i>=1){const p=all[i-1];this.markov1[p][d]++}if(i>=2){const k=`${all[i-2]}${all[i-1]}`;if(!this.markov2[k])this.markov2[k]=Array(10).fill(0);this.markov2[k][d]++}}
+getM1(f){const r=this.markov1[f],s=r.reduce((a,b)=>a+b,0);return s===0?Array(10).fill(0.1):r.map(v=>v/s)}
+getM2(a,b){const k=`${a}${b}`,r=this.markov2[k];if(!r)return Array(10).fill(0.1);const s=r.reduce((a,b)=>a+b,0);return s===0?Array(10).fill(0.1):r.map(v=>v/s)}
+entropy(){if(this.total===0)return 0;let h=0;for(let c of this.counts){if(c===0)continue;const p=c/this.total;h-=p*Math.log2(p)}return h}
+bias(){const h=this.entropy(),m=Math.log2(10);return 1-(h/m)}
+zs(){if(this.total===0)return Array(10).fill(0);const e=this.total*0.1;return this.counts.map(c=>e===0?0:(c-e)/Math.sqrt(e*0.9))}
+acf(t,m=5){const n=t.length;if(n<m+2)return Array(m).fill(0);const mean=t.reduce((a,b)=>a+b,0)/n;let c0=0;for(let i=0;i<n;i++)c0+=(t[i]-mean)**2;c0/=n;const out=[];for(let l=1;l<=m;l++){let c=0;for(let i=0;i<n-l;i++)c+=(t[i]-mean)*(t[i+l]-mean);c/=(n-l);out.push(c0===0?0:c/c0)}return out}
+hc(t,w=30){const r=t.slice(-w),f=Array(10).fill(0);r.forEach(d=>f[d]++);const s=f.map((v,i)=>({d:i,f:v})).sort((a,b)=>b.f-a.f);return{hot:s.slice(0,3).map(x=>x.d),cold:s.slice(-3).map(x=>x.d),freq:f}}
+splits(t){const r=t.slice(-50);if(r.length===0)return{even:.5,odd:.5,high:.5,low:.5};return{even:r.filter(d=>d%2===0).length/r.length,odd:r.filter(d=>d%2!==0).length/r.length,high:r.filter(d=>d>=5).length/r.length,low:r.filter(d=>d<5).length/r.length}}
+ngrams(t,n,top=8){const c={};for(let i=0;i<=t.length-n;i++){const s=t.slice(i,i+n).join('');c[s]=(c[s]||0)+1}return Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,top).map(([s,cnt])=>({seq:s,cnt,pct:(cnt/(t.length-n+1)*100).toFixed(1)}))}
+chiU(){if(this.total<10)return{stat:0,p:1,reject:false};const e=this.total*0.1;let c=0;for(let v of this.counts)c+=((v-e)**2)/e;return{stat:c.toFixed(2),p:(1-cdf(c,9)).toFixed(4),reject:(1-cdf(c,9))<0.05}}
+chiI(){if(this.total<20)return{stat:0,p:1,reject:false};let c=0,df=0;for(let i=0;i<10;i++){const rs=this.markov1[i].reduce((a,b)=>a+b,0);if(rs===0)continue;for(let j=0;j<10;j++){const o=this.markov1[i][j],e=(rs*this.counts[j])/this.total;if(e>0){c+=((o-e)**2)/e;df++}}}df=Math.max(1,df-19);return{stat:c.toFixed(2),p:(1-cdf(c,df)).toFixed(4),reject:(1-cdf(c,df))<0.05}}
+ens(t){if(t.length<2)return Array(10).fill(0.1);const last=t[t.length-1],p2=t[t.length-2],freq=this.counts.map(c=>c/Math.max(1,this.total)),rev=freq.map(p=>0.1+(0.1-p)*0.5),rs=rev.reduce((a,b)=>a+b,0),fr=rev.map(p=>p/rs),m1=this.getM1(last),m2=this.getM2(p2,last),en=[];for(let d=0;d<10;d++)en[d]=fr[d]*0.25+m1[d]*0.35+m2[d]*0.40;const s=en.reduce((a,b)=>a+b,0);return en.map(p=>p/s)}
+}
+
+function cdf(x,k){if(x<=0)return 0;const lg=(s,z)=>{let sm=0,tm=1/s;for(let n=0;n<100;n++){sm+=tm;tm*=z/(s+n+1);if(tm<1e-15)break}return Math.pow(z,s)*Math.exp(-z)*sm};return lg(k/2,x/2)/g(k/2)}
+function g(z){const C=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];if(z<0.5)return Math.PI/(Math.sin(Math.PI*z)*g(1-z));z-=1;let x=C[0];for(let i=1;i<9;i++)x+=C[i]/(z+i);const t=z+7.5;return Math.sqrt(2*Math.PI)*Math.pow(t,z+0.5)*Math.exp(-t)*x}
+
+function log(msg,type='info'){const el=document.getElementById('wsLog'),time=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}),cls=type==='in'?'log-in':type==='out'?'log-out':type==='err'?'log-err':type==='warn'?'log-warn':'';const line=document.createElement('div');line.className='log-line';line.innerHTML=`<span class="log-time">${time}</span><span class="${cls}">${msg}</span>`;el.appendChild(line);el.scrollTop=el.scrollHeight;if(el.children.length>100)el.removeChild(el.firstChild)}
+function setStatus(st,text){const b=document.getElementById('statusBadge');b.className='badge '+st;b.textContent=text}
+
+function connectWS(){
+if(state.ws&&state.ws.readyState===WebSocket.OPEN){log('Already connected. Disconnect first.','warn');return}
+state.activeSymbol=document.getElementById('symbolSelect').value;
+state.appId=document.getElementById('appIdInput').value||'1089';
+const url=`wss://ws.derivws.com/websockets/v3?app_id=${state.appId}`;
+setStatus('conn','● CONNECTING...');
+log('Opening: '+url,'out');
+try{state.ws=new WebSocket(url)}catch(e){log('Failed: '+e.message,'err');setStatus('err','● FAILED');return}
+state.ws.onopen=()=>{setStatus('live','● LIVE — '+state.activeSymbol);log('WebSocket OPEN','in');document.getElementById('connectBtn').disabled=true;document.getElementById('disconnectBtn').disabled=false;document.getElementById('symbolSelect').disabled=true;document.getElementById('streamSym').textContent=state.activeSymbol;const sub={ticks:state.activeSymbol,subscribe:1,req_id:state.reqId++};state.ws.send(JSON.stringify(sub));log('Sent: '+JSON.stringify(sub),'out');state.pingInterval=setInterval(()=>{if(state.ws&&state.ws.readyState===WebSocket.OPEN)state.ws.send(JSON.stringify({ping:1,req_id:state.reqId++}))},25000)}
+state.ws.onmessage=(e)=>{let data;try{data=JSON.parse(e.data)}catch(err){log('Invalid JSON: '+e.data.slice(0,80),'err');return}const short=JSON.stringify(data).slice(0,150);log('Recv ['+data.msg_type+']: '+short+'...','in');if(data.msg_type==='ping')return;if(data.msg_type==='tick'&&data.tick){const q=parseFloat(data.tick.quote);if(isNaN(q)){log('Bad quote: '+data.tick.quote,'err');return}const d=parseInt(q.toString().slice(-1));state.prices[state.activeSymbol]=q;document.getElementById('lastPrice').textContent='Price: '+q.toFixed(5);const t0=performance.now();processTick(state.activeSymbol,d);document.getElementById('latency').textContent=(performance.now()-t0).toFixed(2)+'ms'}if(data.error){log('API Error: '+(data.error.message||JSON.stringify(data.error)),'err');setStatus('err','● API ERROR')}}
+state.ws.onerror=(e)=>{log('WebSocket ERROR (state='+(state.ws?state.ws.readyState:'null')+')','err');setStatus('err','● ERROR')}
+state.ws.onclose=(e)=>{const reason=e.wasClean?'Clean('+e.code+')':'Abnormal('+e.code+')';log('WebSocket CLOSED — '+reason,e.wasClean?'out':'err');setStatus('','● DISCONNECTED');document.getElementById('connectBtn').disabled=false;document.getElementById('disconnectBtn').disabled=true;document.getElementById('symbolSelect').disabled=false;document.getElementById('streamSym').textContent='—';clearInterval(state.pingInterval);state.ws=null}
+state.connected=true}
+
+function disconnectWS(){state.connected=false;clearInterval(state.pingInterval);if(state.ws){if(state.ws.readyState===WebSocket.OPEN){const f={forget_all:'ticks',req_id:state.reqId++};state.ws.send(JSON.stringify(f));log('Sent: '+JSON.stringify(f),'out')}state.ws.close();state.ws=null}setStatus('','● DISCONNECTED');document.getElementById('connectBtn').disabled=false;document.getElementById('disconnectBtn').disabled=true;document.getElementById('symbolSelect').disabled=false;document.getElementById('streamSym').textContent='—';document.getElementById('lastPrice').textContent='Price: —';log('Disconnected','out')}
+
+function processTick(sym,digit){state.ticks[sym].push(digit);if(state.ticks[sym].length>500)state.ticks[sym].shift();state.engines[sym].add(digit,state.ticks[sym]);renderAll(sym)}
+
+const tooltip=document.getElementById('tooltip');
+function showTooltip(e,text){tooltip.textContent=text;tooltip.style.left=e.pageX+12+'px';tooltip.style.top=e.pageY+12+'px';tooltip.style.opacity=1}
+function hideTooltip(){tooltip.style.opacity=0}
+
+function renderAll(sym){
+const eng=state.engines[sym],ticks=state.ticks[sym];if(!eng||ticks.length===0)return;
+document.getElementById('tickCount').textContent='Ticks: '+ticks.length;
+const recent=ticks.slice(-50),hc=eng.hc(ticks,30);
+document.getElementById('tickStream').innerHTML=recent.map((d,i)=>{let c='tick-digit';if(i>=recent.length-5)c+=' recent';else if(hc.hot.includes(d))c+=' hot';else if(hc.cold.includes(d))c+=' cold';return`<div class="${c}">${d}</div>`}).join('');
+const probs=eng.ens(ticks),maxP=Math.max(...probs);
+document.getElementById('predictionBar').innerHTML=probs.map((p,d)=>`<div class="pred-col"><div class="pred-val">${(p*100).toFixed(1)}%</div><div class="pred-bar ${p===maxP?'ensemble':''}" style="height:${Math.max(4,p*300)}px"></div><div class="pred-label">${d}</div></div>`).join('');
+const last=ticks[ticks.length-1],p2=ticks[ticks.length-2],freq=eng.counts.map(c=>c/Math.max(1,eng.total)),rev=freq.map((p,i)=>({d:i,v:0.1+(0.1-p)*0.5})).sort((a,b)=>b.v-a.v)[0].d,m1b=eng.getM1(last).map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d,m2b=eng.getM2(p2,last).map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d,ensb=probs.map((p,i)=>({d:i,p})).sort((a,b)=>b.p-a.p)[0].d;
+document.getElementById('ensembleVotes').innerHTML=`<span class="vote-pill freq">Freq Reversion: ${rev}</span><span class="vote-pill markov1">Markov-1: ${m1b}</span><span class="vote-pill markov2">Markov-2: ${m2b}</span><span class="vote-pill final">ENSEMBLE: ${ensb}</span>`;
+const mv=Math.max(...eng.markov1.flat())||1;
+document.getElementById('markov1Heatmap').innerHTML=eng.markov1.flatMap((row,i)=>row.map((cnt,j)=>{const int=cnt/mv,pr=eng.total>0?(cnt/Math.max(1,eng.counts[i])*100).toFixed(0):0,bg=`rgba(59,130,246,${0.1+int*0.9})`;return`<div class="heat-cell" style="background:${bg};color:${int>0.5?'white':'var(--text)'}" onmouseenter="showTooltip(event,'P(${j}|${i})=${pr}%, C:${cnt}')" onmouseleave="hideTooltip()">${cnt}</div>`})).join('');
+const m2e=Object.entries(eng.markov2).map(([k,r])=>{const s=r.reduce((a,b)=>a+b,0),b=r.map((c,i)=>({d:i,c,p:s?c/s:0})).sort((a,b)=>b.p-a.p)[0];return{k,s,bd:b.d,bp:b.p}}).sort((a,b)=>b.s-a.s).slice(0,10);
+document.getElementById('markov2List').innerHTML=m2e.map(e=>`<div class="ngram-item"><span class="ngram-pattern">${e.k[0]}→${e.k[1]}→${e.bd}</span><span class="ngram-freq">${(e.bp*100).toFixed(1)}% (${e.s} obs)</span></div>`).join('');
+const h=eng.entropy(),b=eng.bias();document.getElementById('entropyVal').textContent=h.toFixed(3);document.getElementById('biasVal').textContent=b.toFixed(3);const mh=Math.log2(10);document.getElementById('entropyRing').style.strokeDashoffset=251.2*(1-h/mh);document.getElementById('entropyPct').textContent=(h/mh*100).toFixed(0)+'%';document.getElementById('biasRing').style.strokeDashoffset=251.2*(1-b);document.getElementById('biasPct').textContent=(b*100).toFixed(0)+'%';
+const u=eng.chiU(),ind=eng.chiI();document.getElementById('chiUniform').textContent=u.p;document.getElementById('chiUniform').style.color=u.reject?'var(--danger)':'var(--success)';document.getElementById('chiIndep').textContent=ind.p;document.getElementById('chiIndep').style.color=ind.reject?'var(--danger)':'var(--success)';document.getElementById('chiUStat').textContent=u.stat;document.getElementById('chiUP').textContent=u.p;document.getElementById('chiUR').textContent=u.reject?'REJECT':'PASS';document.getElementById('chiUR').style.color=u.reject?'var(--danger)':'var(--success)';document.getElementById('chiIStat').textContent=ind.stat;document.getElementById('chiIP').textContent=ind.p;document.getElementById('chiIR').textContent=ind.reject?'REJECT':'PASS';document.getElementById('chiIR').style.color=ind.reject?'var(--danger)':'var(--success)';
+const zs=eng.zs();document.getElementById('zScoreGrid').innerHTML=zs.map((z,d)=>{let c='z-neu';if(z>1.5)c='z-pos';else if(z<-1.5)c='z-neg';return`<div class="z-cell"><div class="z-dig">${d}</div><div class="z-val ${c}">${z>0?'+':''}${z.toFixed(2)}</div></div>`}).join('');
+const ac=eng.acf(ticks,5),ma=Math.max(...ac.map(Math.abs),0.1);document.getElementById('acfChart').innerHTML=ac.map((v,i)=>{const ht=Math.abs(v)/ma*90,col=v>0?'var(--success)':'var(--danger)';return`<div class="acf-bar" style="height:${ht}px;background:${col};opacity:${0.3+Math.abs(v)*0.7}" data-lag="${v.toFixed(2)}"></div>`}).join('');
+const canvas=document.getElementById('distChart'),ctx=canvas.getContext('2d'),dpr=window.devicePixelRatio||1,rect=canvas.getBoundingClientRect();canvas.width=rect.width*dpr;canvas.height=120*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,rect.width,120);const w=rect.width,hh=120,bw=(w-40)/10,freqs=eng.counts.map(c=>eng.total?c/eng.total:0),mf=Math.max(...freqs,0.15),y10=hh-20-(0.1/mf)*(hh-40);ctx.strokeStyle='rgba(239,68,68,0.5)';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(20,y10);ctx.lineTo(w-20,y10);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(239,68,68,0.7)';ctx.font='10px sans-serif';ctx.fillText('Expected 10%',w-70,y10-4);freqs.forEach((f,i)=>{const x=20+i*bw+bw*0.1,bww=bw*0.8,bh=(f/mf)*(hh-40),y=hh-20-bh;const grad=ctx.createLinearGradient(0,y,0,hh-20);grad.addColorStop(0,'#3b82f6');grad.addColorStop(1,'rgba(59,130,246,0.3)');ctx.fillStyle=grad;ctx.fillRect(x,y,bww,bh);ctx.fillStyle='#9ca3af';ctx.textAlign='center';ctx.fillText(i,x+bww/2,hh-6);ctx.fillStyle='#e5e7eb';ctx.fillText((f*100).toFixed(1)+'%',x+bww/2,y-4)});
+document.getElementById('hotCold').innerHTML=`<div style="margin-bottom:8px"><span style="color:var(--hot);font-weight:700">🔥 HOT:</span> ${hc.hot.join(', ')}</div><div style="margin-bottom:8px"><span style="color:var(--cold);font-weight:700">❄️ COLD:</span> ${hc.cold.join(', ')}</div><div style="display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-top:8px">${hc.freq.map((f,i)=>{let bg='var(--bg)';if(hc.hot.includes(i))bg='rgba(248,113,113,0.3)';else if(hc.cold.includes(i))bg='rgba(96,165,250,0.3)';return`<div style="text-align:center;padding:4px;border-radius:3px;background:${bg};border:1px solid var(--border);font-size:11px"><div style="font-weight:700">${i}</div><div style="font-size:9px;color:var(--muted)">${f}</div></div>`}).join('')}</div>`;
+const sp=eng.splits(ticks);document.getElementById('evenFill').style.width=(sp.even*100)+'%';document.getElementById('evenText').textContent=`Even ${(sp.even*100).toFixed(0)}%`;document.getElementById('oddFill').style.width=(sp.odd*100)+'%';document.getElementById('oddText').textContent=`Odd ${(sp.odd*100).toFixed(0)}%`;document.getElementById('highFill').style.width=(sp.high*100)+'%';document.getElementById('highText').textContent=`High ${(sp.high*100).toFixed(0)}%`;document.getElementById('lowFill').style.width=(sp.low*100)+'%';document.getElementById('lowText').textContent=`Low ${(sp.low*100).toFixed(0)}%`;
+const bi=eng.ngrams(ticks,2,8),tr=eng.ngrams(ticks,3,8);document.getElementById('bigramList').innerHTML=bi.map(n=>`<div class="ngram-item"><span class="ngram-pattern">${n.seq[0]}→${n.seq[1]}</span><span class="ngram-freq">${n.cnt}× (${n.pct}%)</span></div>`).join('')||'<div style="color:var(--muted);font-size:11px;padding:8px 0">Insufficient data...</div>';document.getElementById('trigramList').innerHTML=tr.map(n=>`<div class="ngram-item"><span class="ngram-pattern">${n.seq[0]}→${n.seq[1]}→${n.seq[2]}</span><span class="ngram-freq">${n.cnt}× (${n.pct}%)</span></div>`).join('')||'<div style="color:var(--muted);font-size:11px;padding:8px 0">Insufficient data...</div>';
+}
+
+function resetCurrent(){const s=state.activeSymbol;state.engines[s]=new StatsEngine();state.ticks[s]=[];state.prices[s]=null;document.getElementById('tickCount').textContent='Ticks: 0';document.getElementById('lastPrice').textContent='Price: —';renderAll(s);log('Reset '+s,'out')}
+function exportData(){const s=state.activeSymbol,t=state.ticks[s]||[];let csv='Tick,Digit\n';t.forEach((d,i)=>csv+=`${i+1},${d}\n`);const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`deriv_${s}_digits_${Date.now()}.csv`;a.click();URL.revokeObjectURL(url);log('Exported '+s,'in')}
+window.addEventListener('resize',()=>{if(state.engines[state.activeSymbol])renderAll(state.activeSymbol)});
+renderAll(state.activeSymbol);
+</script>
+</body>
+</html>
